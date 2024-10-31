@@ -1,0 +1,4 @@
+google-chrome-data/
+.wwebjs_auth/
+.wwebjs_cache/
+node_modules/ 

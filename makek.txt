@@ -1,0 +1,14 @@
+#Cara install
+1. npm install
+
+#Cara Makek
+1. npm start 
+2. Scan QR
+3. buka tab baru (di chrome nya)
+4. buka kyk cube (di kanan atas ) pilih search
+5. klik login
+6. udh login ya udh
+
+#Require 
+nodejs 20 
+npm terbaru
