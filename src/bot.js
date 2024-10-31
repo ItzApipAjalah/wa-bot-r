@@ -211,28 +211,27 @@ client.on('message', async (message) => {
             if (isChannel) {
                 console.log('Form link detected in channel:', chat.name);
                 
-                const formUrl = message.body.match(/(https?:\/\/(docs\.google\.com\/forms|forms\.gle)[^\s]+)/i)?.[0];
+                const formUrls = message.body.match(/(https?:\/\/(docs\.google\.com\/forms|forms\.gle)[^\s]+)/gi) || [];
                 
-                if (formUrl) {
-                    channelState.formState.currentLink = formUrl;
-                    
+                if (formUrls.length > 0) {
                     try {
                         const targetChat = await client.getChatById(channelState.targetNumber);
-                        await targetChat.sendMessage(`Processing Google Form from channel "${chat.name}" with ID: ${config.formId}`);
+                        await targetChat.sendMessage(`Processing ${formUrls.length} Google Forms from channel "${chat.name}" with ID: ${config.formId}`);
                         
-                        const success = await handleGoogleForm(formUrl);
+                        const results = await Promise.all(formUrls.map(async (url) => {
+                            channelState.formState.currentLink = url;
+                            const success = await handleGoogleForm(url);
+                            return { url, success };
+                        }));
                         
-                        if (success) {
-                            await targetChat.sendMessage('Form filled successfully. Please check the browser window.');
-                        } else {
-                            await targetChat.sendMessage('Error processing the form.');
-                        }
+                        const successCount = results.filter(r => r.success).length;
+                        await targetChat.sendMessage(`Processed ${successCount} out of ${formUrls.length} forms successfully.`);
                         
                     } catch (error) {
-                        console.error('Error processing form:', error);
+                        console.error('Error processing forms:', error);
                     }
                 } else {
-                    console.error('Could not extract form URL from message');
+                    console.error('Could not extract form URLs from message');
                 }
             }
             return;
