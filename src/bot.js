@@ -1,6 +1,7 @@
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const config = require('./config.js');
+const { startTelegramBot } = require('./telegramBot.js');
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -65,10 +66,47 @@ async function handleGoogleForm(link) {
 
         await page.waitForSelector('form', { timeout: 60000 });
         
-        console.log(`Form loaded. Processing with ID: ${config.formId}`);
+        // detek pembtas
+        const formattedId = await page.evaluate((idConfig) => {
+            function findIdInputAndDescription() {
+                const inputs = Array.from(document.querySelectorAll('input[type="text"], [role="textbox"]'));
+                for (const input of inputs) {
+                    const container = input.closest('div[role="listitem"]');
+                    if (container && container.textContent.toLowerCase().includes('id ml server')) {
+                        const description = container.textContent;
+                        return { input, description };
+                    }
+                }
+                return null;
+            }
 
-        await page.waitForTimeout(2000);
+            const result = findIdInputAndDescription();
+            if (result) {
+                const { input, description } = result;
+                
+                const exampleMatch = description.match(/(?:format|contoh|example)?\s*:?\s*(\d+)([\D]+)(\d+)/i);
+                
+                if (exampleMatch) {
+                    const delimiter = exampleMatch[2]; // ngambl hasil
+                    console.log('Detected delimiter:', delimiter);
+                    
+                    
+                    const formattedId = `${idConfig.serverId}${delimiter}${idConfig.zoneId}`;
+                    
+                   
+                    input.value = formattedId;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    return { success: true, formattedId, delimiter };
+                }
+            }
+            return { success: false };
+        }, config.formId);
 
+        console.log('Form ID formatting result:', formattedId);
+
+       
         await page.evaluate(() => {
             function findEmailCheckbox() {
                 const checkboxes = Array.from(document.querySelectorAll('div[role="checkbox"]'));
@@ -95,35 +133,6 @@ async function handleGoogleForm(link) {
                 emailCheckbox.click();
             }
         });
-
-        await page.evaluate((predefinedId) => {
-            function findIdInput() {
-                const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
-                for (const input of inputs) {
-                    const container = input.closest('div[role="listitem"]');
-                    if (container && container.textContent.toLowerCase().includes('id ml server')) {
-                        return input;
-                    }
-                }
-
-                const textboxes = Array.from(document.querySelectorAll('[role="textbox"]'));
-                for (const textbox of textboxes) {
-                    const container = textbox.closest('div[role="listitem"]');
-                    if (container && container.textContent.toLowerCase().includes('id ml server')) {
-                        return textbox;
-                    }
-                }
-
-                return null;
-            }
-
-            const idInput = findIdInput();
-            if (idInput) {
-                idInput.value = predefinedId;
-                idInput.dispatchEvent(new Event('input', { bubbles: true }));
-                idInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        }, config.formId);
 
         await page.waitForTimeout(1000);
 
@@ -216,7 +225,7 @@ client.on('message', async (message) => {
                 if (formUrls.length > 0) {
                     try {
                         const targetChat = await client.getChatById(channelState.targetNumber);
-                        await targetChat.sendMessage(`Processing ${formUrls.length} Google Forms from channel "${chat.name}" with ID: ${config.formId}`);
+                        await targetChat.sendMessage(`Processing ${formUrls.length} Google Forms from channel "${chat.name}"`);
                         
                         const results = await Promise.all(formUrls.map(async (url) => {
                             channelState.formState.currentLink = url;
@@ -257,4 +266,23 @@ process.on('SIGINT', async () => {
     process.exit(0);
 });
 
-client.initialize(); 
+// Modified initialization
+async function initializeBots() {
+    try {
+        // Initialize WhatsApp
+        await client.initialize();
+        console.log('WhatsApp bot initialized');
+
+        // Get browser instance from WhatsApp client
+        const browser = await client.pupPage.browser();
+        
+        // Start Telegram bot with the same browser instance
+        await startTelegramBot(browser);
+        console.log('Telegram bot initialized');
+    } catch (error) {
+        console.error('Error initializing bots:', error);
+    }
+}
+
+// Start both bots
+initializeBots(); 
